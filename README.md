@@ -62,7 +62,13 @@ realtime-leaderboard/
 │   ├── app.ts
 │   └── server.ts
 ├── tests/
+│   ├── unit/
+│   └── integration/
 ├── prisma/
+│   ├── schema.prisma
+│   └── seed.ts
+├── docs/
+│   └── database-design.md
 ├── docker/
 ├── .env.example
 ├── .gitignore
@@ -73,6 +79,46 @@ realtime-leaderboard/
 ├── README.md
 └── ...
 ```
+
+## Database
+
+### Entity Relationship
+
+```text
+User
+ └── Score
+      └── Game
+```
+
+### Tables
+
+| Table    | Purpose                                                   |
+| -------- | --------------------------------------------------------- |
+| `users`  | Stores authenticated users with unique username and email |
+| `games`  | Stores game definitions with unique slug for URLs         |
+| `scores` | Immutable score history linking users to games            |
+
+### Key Design Decisions
+
+- **UUID primary keys** for all entities
+- **Immutable scores**: Every submission creates a new `Score` row; history is never overwritten
+- **Restrict delete behavior**: Users and Games cannot be deleted while referenced by scores, preserving historical integrity
+- **Indexes**: Optimized for future leaderboard and reporting queries
+
+### Migration Commands
+
+```bash
+npm run prisma:migrate
+npm run prisma:seed
+```
+
+### Seed Data
+
+Development seed includes:
+
+- 3 users: `player_one`, `player_two`, `player_three`
+- 3 games: `chess`, `trivia`, `space-runner`
+- 9 historical score records
 
 ## Prerequisites
 
@@ -135,8 +181,16 @@ The server will be available at `http://localhost:3000`.
 
 ## Running Tests
 
+Unit tests:
+
 ```bash
 npm test
+```
+
+Integration tests (requires PostgreSQL):
+
+```bash
+npm run test:integration
 ```
 
 Watch mode:
@@ -147,7 +201,7 @@ npm run test:watch
 
 ## API
 
-### Current Phase (Phase 1)
+### Current Phase (Phase 2)
 
 ```text
 GET /api/v1/health
@@ -188,18 +242,16 @@ Returns application health status including dependency checks.
 
 ## Current Phase
 
-**Phase 1 — Project Foundation**
+**Phase 2 — Database Design**
 
-- Project scaffolding with TypeScript, Fastify, Prisma, Redis
-- Health endpoint with dependency checks
-- Docker Compose for PostgreSQL and Redis
-- Centralized configuration with Zod validation
-- Error handling, request logging, and graceful shutdown
-- ESLint, Prettier, and Vitest configured
+- PostgreSQL schema with User, Game, and Score models
+- Immutable score history
+- Prisma migrations and seed data
+- Database constraint and index strategy
+- Integration tests for data model
 
 ## Future Phases
 
-- **Phase 2** — PostgreSQL schema and data models (User, Game, Score)
 - **Phase 3** — Authentication (register, login, JWT)
 - **Phase 4** — Game CRUD endpoints
 - **Phase 5** — Score submission and history

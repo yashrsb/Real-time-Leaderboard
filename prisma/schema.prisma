@@ -7,11 +7,45 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Placeholder model required for Prisma Client generation.
-// Prisma requires at least one model in the schema to generate a usable client.
-// This is NOT an application entity and will be removed once real models are defined in Phase 2.
-model Migration {
-  id        String   @id @default(cuid())
-  name      String
-  appliedAt DateTime @default(now())
+model User {
+  id           String   @id @default(uuid())
+  username     String   @unique @db.VarChar(50)
+  email        String   @unique @db.VarChar(255)
+  passwordHash String   @db.VarChar(255)
+  createdAt    DateTime @default(now()) @db.Timestamp()
+  updatedAt    DateTime @updatedAt @db.Timestamp()
+
+  scores Score[]
+
+  @@map("users")
+}
+
+model Game {
+  id          String    @id @default(uuid())
+  name        String    @db.VarChar(100)
+  slug        String    @unique @db.VarChar(50)
+  description String?
+  createdAt   DateTime  @default(now()) @db.Timestamp()
+  updatedAt   DateTime  @updatedAt @db.Timestamp()
+
+  scores Score[]
+
+  @@map("games")
+}
+
+model Score {
+  id        String   @id @default(uuid())
+  userId    String
+  gameId    String
+  score     Int
+  createdAt DateTime @default(now()) @db.Timestamp()
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  game Game @relation(fields: [gameId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([gameId])
+  @@index([gameId, createdAt])
+  @@index([userId, gameId, createdAt])
+  @@map("scores")
 }

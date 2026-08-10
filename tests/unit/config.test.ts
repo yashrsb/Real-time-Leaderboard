@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterEach } from "vitest";
-import { loadEnv, resetEnvCache } from "../src/config/index.js";
+import { loadEnv, resetEnvCache } from "@src/config/index";
 
 describe("Environment Configuration", () => {
   beforeAll(() => {
@@ -35,7 +35,9 @@ describe("Environment Configuration", () => {
     const originalDb = process.env.DATABASE_URL;
     delete process.env.DATABASE_URL;
 
-    expect(() => loadEnv()).toThrow("Invalid environment variables");
+    expect(() => {
+      loadEnv();
+    }).toThrow("Invalid environment variables");
 
     process.env.DATABASE_URL = originalDb;
   });

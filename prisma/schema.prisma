@@ -1,0 +1,17 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Placeholder model required for Prisma Client generation.
+// Prisma requires at least one model in the schema to generate a usable client.
+// This is NOT an application entity and will be removed once real models are defined in Phase 2.
+model Migration {
+  id        String   @id @default(cuid())
+  name      String
+  appliedAt DateTime @default(now())
+}

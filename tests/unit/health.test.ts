@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { buildApp } from "../src/app.js";
-import { resetEnvCache } from "../src/config/index.js";
+import { buildApp } from "@src/app";
+import { resetEnvCache } from "@src/config/index";
 
 const mockPrisma = vi.hoisted(() => ({
   $queryRaw: vi.fn().mockResolvedValue([{ one: 1 }]),
@@ -10,13 +10,13 @@ const mockRedis = vi.hoisted(() => ({
   ping: vi.fn().mockResolvedValue("PONG"),
 }));
 
-vi.mock("../src/db/prisma.js", () => ({
+vi.mock("@src/db/prisma", () => ({
   connectPrisma: vi.fn().mockResolvedValue(undefined),
   disconnectPrisma: vi.fn().mockResolvedValue(undefined),
   getPrisma: vi.fn().mockReturnValue(mockPrisma),
 }));
 
-vi.mock("../src/db/redis.js", () => ({
+vi.mock("@src/db/redis", () => ({
   connectRedis: vi.fn().mockResolvedValue(undefined),
   disconnectRedis: vi.fn().mockResolvedValue(undefined),
   createRedis: vi.fn().mockReturnValue(mockRedis),

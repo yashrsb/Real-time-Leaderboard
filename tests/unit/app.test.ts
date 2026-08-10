@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { buildApp } from "../src/app.js";
+import { buildApp } from "@src/app";
 
-vi.mock("../src/db/prisma.js", () => ({
+vi.mock("@src/db/prisma", () => ({
   connectPrisma: vi.fn().mockResolvedValue(undefined),
   disconnectPrisma: vi.fn().mockResolvedValue(undefined),
   getPrisma: vi.fn().mockReturnValue({
@@ -9,7 +9,7 @@ vi.mock("../src/db/prisma.js", () => ({
   }),
 }));
 
-vi.mock("../src/db/redis.js", () => ({
+vi.mock("@src/db/redis", () => ({
   connectRedis: vi.fn().mockResolvedValue(undefined),
   disconnectRedis: vi.fn().mockResolvedValue(undefined),
   createRedis: vi.fn().mockReturnValue({

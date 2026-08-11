@@ -408,12 +408,69 @@ Retrieve a single game by ID. Public endpoint.
 }
 ```
 
+### Score Submission
+
+#### POST /api/v1/games/:gameId/scores
+
+Submit a score for a game. Requires authentication.
+
+**Request:**
+
+```http
+POST /api/v1/games/:gameId/scores
+Authorization: Bearer <ACCESS_TOKEN>
+Content-Type: application/json
+```
+
+```json
+{
+  "score": 1500
+}
+```
+
+**Response (201 Created):**
+
+```json
+{
+  "score": {
+    "id": "uuid",
+    "gameId": "uuid",
+    "userId": "uuid",
+    "score": 1500,
+    "createdAt": "2026-08-11T15:00:00.000Z"
+  }
+}
+```
+
+**Architecture:**
+
+```text
+Score Submission
+       │
+       ├──────────────► PostgreSQL
+       │                 Immutable score history
+       │
+       └──────────────► Redis
+                         Current best score
+                         Sorted Set leaderboard
+```
+
+PostgreSQL stores every score submission as immutable history. Redis maintains each user's highest score per game using a Sorted Set for fast leaderboard queries.
+
+**Redis Key Format:**
+
+```text
+leaderboard:game:{gameId}
+```
+
+**Redis Member Format:**
+
+```text
+user:{userId}
+```
+
 ### Future Phases
 
-- `POST /api/v1/games`
-- `GET  /api/v1/games`
-- `GET  /api/v1/games/:gameId`
-- `POST /api/v1/games/:gameId/scores`
 - `GET  /api/v1/games/:gameId/scores/history`
 - `GET  /api/v1/leaderboards/global`
 - `GET  /api/v1/leaderboards/:gameId`
@@ -423,18 +480,15 @@ Retrieve a single game by ID. Public endpoint.
 
 ## Current Phase
 
-**Phase 4 — Game Management** (Complete)
+**Phase 5 — Score Submission** (Complete)
 
-- `POST /api/v1/games` — Create a game (authenticated)
-- `GET /api/v1/games` — List all games (public)
-- `GET /api/v1/games/:gameId` — Get a game by ID (public)
-- Zod validation for name, slug, and description
-- Duplicate slug protection with `409 Conflict`
-- Database-level unique constraint on `Game.slug`
+- `POST /api/v1/games/:gameId/scores` — Submit a score (authenticated)
+- Every submission persisted as immutable PostgreSQL history
+- Redis Sorted Set maintains highest score per user per game
+- Atomic best-score updates via Lua script
 
 ## Future Phases
 
-- **Phase 5** — Score submission and history
 - **Phase 6** — Redis leaderboard (Sorted Sets)
 - **Phase 7** — Leaderboard API endpoints
 - **Phase 8** — Server-Sent Events (SSE) for real-time updates

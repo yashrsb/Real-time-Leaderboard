@@ -17,6 +17,7 @@ export default [
       },
       globals: {
         Node: "readonly",
+        URL: "readonly",
         console: "readonly",
         process: "readonly",
       },

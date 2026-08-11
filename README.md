@@ -82,6 +82,11 @@ realtime-leaderboard/
 
 ## Database
 
+### Providers
+
+- **PostgreSQL**: Neon (serverless PostgreSQL)
+- **Redis**: Upstash Redis
+
 ### Entity Relationship
 
 ```text
@@ -108,7 +113,7 @@ User
 ### Migration Commands
 
 ```bash
-npm run prisma:migrate
+npm run prisma:migrate -- --name init_leaderboard_schema
 npm run prisma:seed
 ```
 
@@ -242,13 +247,14 @@ Returns application health status including dependency checks.
 
 ## Current Phase
 
-**Phase 2 — Database Design**
+**Phase 2 — Database Design** (Complete)
 
 - PostgreSQL schema with User, Game, and Score models
 - Immutable score history
 - Prisma migrations and seed data
 - Database constraint and index strategy
 - Integration tests for data model
+- Verified against Neon PostgreSQL and Upstash Redis
 
 ## Future Phases
 

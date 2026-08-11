@@ -18,8 +18,10 @@ export default [
       globals: {
         Node: "readonly",
         URL: "readonly",
+        Buffer: "readonly",
         console: "readonly",
         process: "readonly",
+        setTimeout: "readonly",
       },
     },
     plugins: {

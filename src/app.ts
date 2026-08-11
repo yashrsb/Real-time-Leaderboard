@@ -5,6 +5,7 @@ import { createRedis } from "./db/redis";
 import { loadEnv } from "./config/index";
 import { errorHandler, notFoundHandler } from "./middleware/index";
 import { healthRoutes } from "./routes/health.routes";
+import { authRoutes } from "./routes/auth.routes";
 
 export async function buildApp(): Promise<FastifyInstance> {
   const env = loadEnv();
@@ -32,6 +33,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   app.setNotFoundHandler(notFoundHandler);
 
   app.register(healthRoutes);
+  app.register(authRoutes);
 
   app.register(import("@fastify/cors"), {
     origin: env.NODE_ENV === "development" ? true : false,
@@ -40,6 +42,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   app.decorate("prisma", getPrisma());
   const redis = createRedis(env.REDIS_URL);
   app.decorate("redis", redis);
+  app.decorate("env", env);
 
   return app;
 }

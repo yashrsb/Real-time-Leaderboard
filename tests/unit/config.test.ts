@@ -7,6 +7,7 @@ describe("Environment Configuration", () => {
     process.env.DATABASE_URL =
       "postgresql://postgres:postgres@localhost:5432/leaderboard";
     process.env.REDIS_URL = "redis://localhost:6379";
+    process.env.JWT_SECRET = "test-secret-key-that-is-long-enough-for-hs256";
   });
 
   afterEach(() => {
@@ -22,6 +23,9 @@ describe("Environment Configuration", () => {
       "postgresql://postgres:postgres@localhost:5432/leaderboard",
     );
     expect(env.REDIS_URL).toBe("redis://localhost:6379");
+    expect(env.JWT_SECRET).toBe(
+      "test-secret-key-that-is-long-enough-for-hs256",
+    );
   });
 
   it("should coerce PORT to number", () => {

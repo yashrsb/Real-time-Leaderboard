@@ -38,10 +38,10 @@ Clean modular monolith with clear separation of concerns:
 - `src/config/` - Environment configuration and validation
 - `src/controllers/` - Thin request handlers
 - `src/routes/` - API route definitions
-- `src/services/` - Business logic (future)
-- `src/repositories/` - Data access layer (future)
+- `src/services/` - Business logic layer
+- `src/repositories/` - Data access layer
 - `src/db/` - Prisma and Redis client setup
-- `src/middleware/` - Error handling, logging, validation (future)
+- `src/middleware/` - Error handling, authentication, logging
 - `src/types/` - TypeScript type definitions
 - `src/utils/` - Shared utilities
 
@@ -141,6 +141,18 @@ Development seed includes:
 
 2. Adjust values as needed (defaults are provided for local development).
 
+### Required Environment Variables
+
+| Variable         | Description                                                  |
+| ---------------- | ------------------------------------------------------------ |
+| `NODE_ENV`       | Runtime environment (`development`, `test`, `production`)    |
+| `PORT`           | Server port (default: `3000`)                                |
+| `HOST`           | Server host (default: `0.0.0.0`)                             |
+| `DATABASE_URL`   | PostgreSQL connection string                                 |
+| `REDIS_URL`      | Redis connection string                                      |
+| `JWT_SECRET`     | Secret key for signing JWT access tokens (min 32 characters) |
+| `JWT_EXPIRES_IN` | JWT expiration duration (default: `15m`)                     |
+
 ## Running PostgreSQL and Redis
 
 Start the infrastructure using Docker Compose:
@@ -206,11 +218,81 @@ npm run test:watch
 
 ## API
 
-### Current Phase (Phase 2)
+### Authentication
 
-```text
-GET /api/v1/health
+#### POST /api/v1/auth/register
+
+Create a new user account.
+
+**Request:**
+
+```json
+{
+  "username": "player_one",
+  "email": "player@example.com",
+  "password": "secure-password"
+}
 ```
+
+**Response (201 Created):**
+
+```json
+{
+  "user": {
+    "id": "uuid",
+    "username": "player_one",
+    "email": "player@example.com",
+    "createdAt": "2026-08-11T10:00:00.000Z"
+  }
+}
+```
+
+#### POST /api/v1/auth/login
+
+Authenticate and receive an access token.
+
+**Request:**
+
+```json
+{
+  "email": "player@example.com",
+  "password": "secure-password"
+}
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "accessToken": "<jwt>",
+  "tokenType": "Bearer",
+  "user": {
+    "id": "uuid",
+    "username": "player_one",
+    "email": "player@example.com"
+  }
+}
+```
+
+#### GET /api/v1/auth/me
+
+Get the current authenticated user. Requires `Authorization: Bearer <token>`.
+
+**Response (200 OK):**
+
+```json
+{
+  "user": {
+    "id": "uuid",
+    "username": "player_one",
+    "email": "player@example.com",
+    "createdAt": "2026-08-11T10:00:00.000Z",
+    "updatedAt": "2026-08-11T10:00:00.000Z"
+  }
+}
+```
+
+### Health
 
 #### GET /api/v1/health
 
@@ -221,7 +303,7 @@ Returns application health status including dependency checks.
 ```json
 {
   "status": "ok",
-  "timestamp": "2026-08-10T12:00:00.000Z",
+  "timestamp": "2026-08-11T12:00:00.000Z",
   "dependencies": {
     "postgres": "ok",
     "redis": "ok"
@@ -231,9 +313,6 @@ Returns application health status including dependency checks.
 
 ### Future Phases
 
-- `POST /api/v1/auth/register`
-- `POST /api/v1/auth/login`
-- `GET  /api/v1/auth/me`
 - `POST /api/v1/games`
 - `GET  /api/v1/games`
 - `GET  /api/v1/games/:gameId`
@@ -247,18 +326,17 @@ Returns application health status including dependency checks.
 
 ## Current Phase
 
-**Phase 2 — Database Design** (Complete)
+**Phase 3 — Authentication** (Complete)
 
-- PostgreSQL schema with User, Game, and Score models
-- Immutable score history
-- Prisma migrations and seed data
-- Database constraint and index strategy
-- Integration tests for data model
-- Verified against Neon PostgreSQL and Upstash Redis
+- JWT access token authentication
+- Argon2id password hashing
+- Register, login, and current-user endpoints
+- Zod request validation
+- Authentication middleware
+- Integration tests verified against Neon PostgreSQL
 
 ## Future Phases
 
-- **Phase 3** — Authentication (register, login, JWT)
 - **Phase 4** — Game CRUD endpoints
 - **Phase 5** — Score submission and history
 - **Phase 6** — Redis leaderboard (Sorted Sets)

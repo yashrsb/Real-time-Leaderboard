@@ -23,6 +23,7 @@ describe("Application Startup", () => {
     process.env.DATABASE_URL =
       "postgresql://postgres:postgres@localhost:5432/leaderboard";
     process.env.REDIS_URL = "redis://localhost:6379";
+    process.env.JWT_SECRET = "test-secret-key-that-is-long-enough-for-hs256";
   });
 
   it("should build the Fastify application without starting an HTTP server", async () => {

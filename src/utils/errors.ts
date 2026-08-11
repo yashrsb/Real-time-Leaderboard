@@ -27,3 +27,17 @@ export function internalServerError(
 ): AppError {
   return createError(500, "INTERNAL_SERVER_ERROR", message);
 }
+
+export function unauthorized(message = "Authentication required."): AppError {
+  return createError(401, "UNAUTHORIZED", message);
+}
+
+export function invalidCredentials(
+  message = "Invalid email or password.",
+): AppError {
+  return createError(401, "INVALID_CREDENTIALS", message);
+}
+
+export function conflict(code: string, message: string): AppError {
+  return createError(409, code, message);
+}

@@ -311,6 +311,103 @@ Returns application health status including dependency checks.
 }
 ```
 
+### Games
+
+#### POST /api/v1/games
+
+Create a new game. Requires authentication.
+
+**Request:**
+
+```http
+POST /api/v1/games
+Authorization: Bearer <ACCESS_TOKEN>
+Content-Type: application/json
+```
+
+```json
+{
+  "name": "Space Runner",
+  "slug": "space-runner",
+  "description": "Fast-paced arcade game"
+}
+```
+
+**Response (201 Created):**
+
+```json
+{
+  "game": {
+    "id": "uuid",
+    "name": "Space Runner",
+    "slug": "space-runner",
+    "description": "Fast-paced arcade game",
+    "createdAt": "2026-08-11T10:00:00.000Z",
+    "updatedAt": "2026-08-11T10:00:00.000Z"
+  }
+}
+```
+
+#### GET /api/v1/games
+
+List all available games. Public endpoint.
+
+**Response (200 OK):**
+
+```json
+{
+  "games": [
+    {
+      "id": "uuid",
+      "name": "Space Runner",
+      "slug": "space-runner",
+      "description": "Fast-paced arcade game",
+      "createdAt": "2026-08-11T10:00:00.000Z",
+      "updatedAt": "2026-08-11T10:00:00.000Z"
+    }
+  ]
+}
+```
+
+#### GET /api/v1/games/:gameId
+
+Retrieve a single game by ID. Public endpoint.
+
+**Response (200 OK):**
+
+```json
+{
+  "game": {
+    "id": "uuid",
+    "name": "Space Runner",
+    "slug": "space-runner",
+    "description": "Fast-paced arcade game",
+    "createdAt": "2026-08-11T10:00:00.000Z",
+    "updatedAt": "2026-08-11T10:00:00.000Z"
+  }
+}
+```
+
+**Error Responses:**
+
+```json
+{
+  "error": {
+    "code": "GAME_NOT_FOUND",
+    "message": "Game not found."
+  }
+}
+```
+
+```json
+{
+  "error": {
+    "code": "GAME_SLUG_ALREADY_EXISTS",
+    "message": "A game with this slug already exists."
+  }
+}
+```
+
 ### Future Phases
 
 - `POST /api/v1/games`
@@ -326,18 +423,17 @@ Returns application health status including dependency checks.
 
 ## Current Phase
 
-**Phase 3 — Authentication** (Complete)
+**Phase 4 — Game Management** (Complete)
 
-- JWT access token authentication
-- Argon2id password hashing
-- Register, login, and current-user endpoints
-- Zod request validation
-- Authentication middleware
-- Integration tests verified against Neon PostgreSQL
+- `POST /api/v1/games` — Create a game (authenticated)
+- `GET /api/v1/games` — List all games (public)
+- `GET /api/v1/games/:gameId` — Get a game by ID (public)
+- Zod validation for name, slug, and description
+- Duplicate slug protection with `409 Conflict`
+- Database-level unique constraint on `Game.slug`
 
 ## Future Phases
 
-- **Phase 4** — Game CRUD endpoints
 - **Phase 5** — Score submission and history
 - **Phase 6** — Redis leaderboard (Sorted Sets)
 - **Phase 7** — Leaderboard API endpoints

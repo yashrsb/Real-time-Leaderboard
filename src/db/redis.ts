@@ -1,17 +1,28 @@
 import Redis from "ioredis";
+import type { RedisOptions } from "ioredis";
 
 let redisClient: Redis | null = null;
 
 export function createRedis(url: string): Redis {
   if (!redisClient) {
-    redisClient = new Redis(url, {
+    const options: RedisOptions = {
       maxRetriesPerRequest: 3,
       enableReadyCheck: true,
-      retryStrategy: (times) => {
+      retryStrategy: (times: number) => {
         const delay = Math.min(times * 50, 2000);
         return delay;
       },
-    });
+    };
+
+    const parsedUrl = new URL(url);
+    if (
+      url.startsWith("rediss://") ||
+      parsedUrl.hostname.includes("upstash.io")
+    ) {
+      options.tls = {};
+    }
+
+    redisClient = new Redis(url, options);
   }
   return redisClient;
 }

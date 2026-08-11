@@ -1,5 +1,10 @@
 # Database Design
 
+## Providers
+
+- **PostgreSQL**: Neon (serverless PostgreSQL)
+- **Redis**: Upstash Redis (future high-speed leaderboard layer)
+
 ## Why PostgreSQL?
 
 PostgreSQL is the persistent source of truth for all core entities:
@@ -10,6 +15,14 @@ PostgreSQL is the persistent source of truth for all core entities:
 - **Reporting** — time-range analytics and top-player queries
 
 PostgreSQL provides ACID guarantees, robust relational integrity, and powerful query capabilities that are essential for historical data and reporting.
+
+## Why Redis Separately?
+
+Redis will eventually act as the high-performance leaderboard/ranking layer while PostgreSQL retains durable history. This separation allows:
+
+- PostgreSQL to handle complex reporting and historical analysis
+- Redis to serve low-latency leaderboard reads
+- Independent scaling of read-heavy leaderboard traffic
 
 ## Entity Relationship
 

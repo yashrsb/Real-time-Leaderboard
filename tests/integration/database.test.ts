@@ -3,29 +3,32 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
+const unique = Date.now().toString(36);
+
 describe("Database Model — User", () => {
   it("should create a user with required fields", async () => {
     const user = await prisma.user.create({
       data: {
-        username: "testuser",
-        email: "test@example.com",
+        username: `testuser_${unique}`,
+        email: `test_${unique}@example.com`,
         passwordHash: "$2a$10$fakehash",
       },
     });
 
     expect(user.id).toBeDefined();
-    expect(user.username).toBe("testuser");
-    expect(user.email).toBe("test@example.com");
+    expect(user.username).toBe(`testuser_${unique}`);
+    expect(user.email).toBe(`test_${unique}@example.com`);
     expect(user.passwordHash).toBe("$2a$10$fakehash");
     expect(user.createdAt).toBeInstanceOf(Date);
     expect(user.updatedAt).toBeInstanceOf(Date);
   });
 
   it("should enforce unique username", async () => {
+    const username = `uniqueuser_${unique}`;
     await prisma.user.create({
       data: {
-        username: "uniqueuser",
-        email: "unique1@example.com",
+        username,
+        email: `unique1_${unique}@example.com`,
         passwordHash: "$2a$10$fakehash",
       },
     });
@@ -33,23 +36,24 @@ describe("Database Model — User", () => {
     await expect(
       prisma.user.create({
         data: {
-          username: "uniqueuser",
-          email: "unique2@example.com",
+          username,
+          email: `unique2_${unique}@example.com`,
           passwordHash: "$2a$10$fakehash",
         },
       }),
     ).rejects.toThrow();
 
     await prisma.user.deleteMany({
-      where: { username: "uniqueuser" },
+      where: { username },
     });
   });
 
   it("should enforce unique email", async () => {
+    const email = `uniqueemail_${unique}@example.com`;
     await prisma.user.create({
       data: {
-        username: "uniqueemailuser",
-        email: "uniqueemail@example.com",
+        username: `uniqueemailuser_${unique}`,
+        email,
         passwordHash: "$2a$10$fakehash",
       },
     });
@@ -57,15 +61,15 @@ describe("Database Model — User", () => {
     await expect(
       prisma.user.create({
         data: {
-          username: "uniqueemailuser2",
-          email: "uniqueemail@example.com",
+          username: `uniqueemailuser2_${unique}`,
+          email,
           passwordHash: "$2a$10$fakehash",
         },
       }),
     ).rejects.toThrow();
 
     await prisma.user.deleteMany({
-      where: { email: "uniqueemail@example.com" },
+      where: { email },
     });
   });
 });
@@ -75,14 +79,14 @@ describe("Database Model — Game", () => {
     const game = await prisma.game.create({
       data: {
         name: "Test Game",
-        slug: "test-game",
+        slug: `test-game_${unique}`,
         description: "A test game",
       },
     });
 
     expect(game.id).toBeDefined();
     expect(game.name).toBe("Test Game");
-    expect(game.slug).toBe("test-game");
+    expect(game.slug).toBe(`test-game_${unique}`);
     expect(game.description).toBe("A test game");
   });
 
@@ -90,7 +94,7 @@ describe("Database Model — Game", () => {
     const game = await prisma.game.create({
       data: {
         name: "No Desc Game",
-        slug: "no-desc-game",
+        slug: `no-desc-game_${unique}`,
       },
     });
 
@@ -98,10 +102,11 @@ describe("Database Model — Game", () => {
   });
 
   it("should enforce unique slug", async () => {
+    const slug = `unique-slug-game_${unique}`;
     await prisma.game.create({
       data: {
         name: "Slug Game",
-        slug: "unique-slug-game",
+        slug,
       },
     });
 
@@ -109,13 +114,13 @@ describe("Database Model — Game", () => {
       prisma.game.create({
         data: {
           name: "Slug Game 2",
-          slug: "unique-slug-game",
+          slug,
         },
       }),
     ).rejects.toThrow();
 
     await prisma.game.deleteMany({
-      where: { slug: "unique-slug-game" },
+      where: { slug },
     });
   });
 });
@@ -127,8 +132,8 @@ describe("Database Model — Score", () => {
   beforeAll(async () => {
     testUser = await prisma.user.create({
       data: {
-        username: "scoreuser",
-        email: "scoreuser@example.com",
+        username: `scoreuser_${unique}`,
+        email: `scoreuser_${unique}@example.com`,
         passwordHash: "$2a$10$fakehash",
       },
     });
@@ -136,21 +141,25 @@ describe("Database Model — Score", () => {
     testGame = await prisma.game.create({
       data: {
         name: "Score Game",
-        slug: "score-game",
+        slug: `score-game_${unique}`,
       },
     });
   });
 
   afterAll(async () => {
-    await prisma.score.deleteMany({
-      where: { userId: testUser.id },
-    });
-    await prisma.game.delete({
-      where: { id: testGame.id },
-    });
-    await prisma.user.delete({
-      where: { id: testUser.id },
-    });
+    if (testUser) {
+      await prisma.score.deleteMany({
+        where: { userId: testUser.id },
+      });
+      await prisma.user.delete({
+        where: { id: testUser.id },
+      });
+    }
+    if (testGame) {
+      await prisma.game.delete({
+        where: { id: testGame.id },
+      });
+    }
   });
 
   it("should create a score referencing valid user and game", async () => {

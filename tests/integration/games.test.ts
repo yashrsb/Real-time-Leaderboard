@@ -3,7 +3,7 @@ import { buildApp } from "../../src/app";
 import { resetEnvCache } from "../../src/config/index";
 import type { Env } from "../../src/config/env";
 
-const unique = Date.now().toString(36);
+const unique = `game-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 
 const mockEnv: Env = {
   JWT_SECRET: "test-secret-key-that-is-long-enough-for-hs256",
@@ -53,6 +53,23 @@ describe("Game Endpoints", () => {
 
   afterAll(async () => {
     if (app) {
+      const users = await app.prisma.user.findMany({
+        where: {
+          OR: [
+            { username: { contains: `gameuser_${unique}` } },
+            { email: { contains: `game_${unique}` } },
+          ],
+        },
+        select: { id: true },
+      });
+      const userIds = users.map((u) => u.id);
+
+      if (userIds.length > 0) {
+        await app.prisma.score.deleteMany({
+          where: { userId: { in: userIds } },
+        });
+      }
+
       await app.prisma.game.deleteMany({
         where: {
           OR: [{ name: { contains: unique } }, { slug: { contains: unique } }],

@@ -49,4 +49,55 @@ export class LeaderboardRedisService {
     );
     return result as number;
   }
+
+  async getTopPlayers(
+    gameId: string,
+    limit: number,
+  ): Promise<{ userId: string; score: number }[]> {
+    const key = this.getGameLeaderboardKey(gameId);
+
+    // ZREVRANGE: retrieve highest scores first
+    const raw = await this.redis.zrevrange(
+      key,
+      0,
+      Math.max(0, limit - 1),
+      "WITHSCORES",
+    );
+
+    const players: { userId: string; score: number }[] = [];
+    for (let i = 0; i < raw.length; i += 2) {
+      const member = raw[i];
+      const score = raw[i + 1];
+      if (member && score) {
+        const userId = member.replace(/^user:/, "");
+        players.push({ userId, score: Number(score) });
+      }
+    }
+    return players;
+  }
+
+  async getUserScore(gameId: string, userId: string): Promise<number | null> {
+    const key = this.getGameLeaderboardKey(gameId);
+    const member = this.getMemberKey(userId);
+
+    // ZSCORE: retrieve one user's current best score
+    const raw = await this.redis.zscore(key, member);
+    return raw ? Number(raw) : null;
+  }
+
+  async getUserRank(gameId: string, userId: string): Promise<number | null> {
+    const key = this.getGameLeaderboardKey(gameId);
+    const member = this.getMemberKey(userId);
+
+    // ZREVRANK: retrieve one user's zero-based rank
+    const raw = await this.redis.zrevrank(key, member);
+    return raw !== null && raw !== undefined ? raw : null;
+  }
+
+  async getPlayerCount(gameId: string): Promise<number> {
+    const key = this.getGameLeaderboardKey(gameId);
+
+    // ZCARD: retrieve total number of leaderboard members
+    return await this.redis.zcard(key);
+  }
 }

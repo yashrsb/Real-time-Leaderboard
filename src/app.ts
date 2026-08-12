@@ -8,6 +8,7 @@ import { healthRoutes } from "./routes/health.routes";
 import { authRoutes } from "./routes/auth.routes";
 import { gameRoutes } from "./routes/game.routes";
 import { scoreRoutes } from "./routes/score.routes";
+import { leaderboardRoutes } from "./routes/leaderboard.routes";
 
 export async function buildApp(): Promise<FastifyInstance> {
   const env = loadEnv();
@@ -38,6 +39,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   app.register(authRoutes);
   app.register(gameRoutes);
   app.register(scoreRoutes);
+  app.register(leaderboardRoutes);
 
   app.register(import("@fastify/cors"), {
     origin: env.NODE_ENV === "development" ? true : false,

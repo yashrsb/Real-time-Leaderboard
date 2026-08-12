@@ -29,6 +29,23 @@ describe("Authentication Endpoints", () => {
 
   afterAll(async () => {
     if (app) {
+      const users = await app.prisma.user.findMany({
+        where: {
+          OR: [
+            { username: { contains: unique } },
+            { email: { contains: unique } },
+          ],
+        },
+        select: { id: true },
+      });
+      const userIds = users.map((u) => u.id);
+
+      if (userIds.length > 0) {
+        await app.prisma.score.deleteMany({
+          where: { userId: { in: userIds } },
+        });
+      }
+
       await app.prisma.user.deleteMany({
         where: {
           OR: [

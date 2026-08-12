@@ -41,3 +41,7 @@ export function invalidCredentials(
 export function conflict(code: string, message: string): AppError {
   return createError(409, code, message);
 }
+
+export function serviceUnavailable(code: string, message: string): AppError {
+  return createError(503, code, message);
+}

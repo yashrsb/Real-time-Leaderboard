@@ -3,7 +3,7 @@ import { buildApp } from "../../src/app";
 import { resetEnvCache } from "../../src/config/index";
 import type { Env } from "../../src/config/env";
 
-const unique = Date.now().toString(36);
+const unique = `score-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 
 const mockEnv: Env = {
   JWT_SECRET: "test-secret-key-that-is-long-enough-for-hs256",

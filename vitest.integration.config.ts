@@ -9,6 +9,7 @@ export default defineConfig({
     include: ["tests/integration/**/*.test.ts"],
     testTimeout: 30000,
     hookTimeout: 120000,
+    fileParallelism: false,
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],

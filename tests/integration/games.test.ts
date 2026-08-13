@@ -83,7 +83,6 @@ describe("Game Endpoints", () => {
           ],
         },
       });
-      await app.close();
     }
   });
 

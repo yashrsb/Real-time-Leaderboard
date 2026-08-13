@@ -98,8 +98,6 @@ describe("Score Endpoints", () => {
           // ignore redis cleanup errors
         }
       }
-
-      await app.close();
     }
   });
 

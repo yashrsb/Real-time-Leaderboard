@@ -54,7 +54,6 @@ describe("Authentication Endpoints", () => {
           ],
         },
       });
-      await app.close();
     }
   });
 

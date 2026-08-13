@@ -162,8 +162,6 @@ describe("Leaderboard Endpoints", () => {
       } catch {
         // ignore redis cleanup errors
       }
-
-      await app.close();
     }
   });
 

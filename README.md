@@ -562,7 +562,7 @@ Redis provides all ranking, ordering, pagination, and total player count. Postgr
 
 #### GET /api/v1/leaderboards/:gameId/me
 
-Retrieve the authenticated user's ranking in a game. Requires `Authorization: Bearer <token>`.
+Retrieve the authenticated user's ranking in a game, including nearby players. Requires `Authorization: Bearer <token>`.
 
 **Response (200 OK):**
 
@@ -572,9 +572,49 @@ Retrieve the authenticated user's ranking in a game. Requires `Authorization: Be
   "userId": "uuid",
   "score": 1500,
   "rank": 3,
-  "totalPlayers": 42
+  "totalPlayers": 42,
+  "nearbyPlayers": [
+    {
+      "rank": 1,
+      "userId": "uuid",
+      "username": "player_two",
+      "score": 2200,
+      "isCurrentUser": false
+    },
+    {
+      "rank": 2,
+      "userId": "uuid",
+      "username": "player_three",
+      "score": 1800,
+      "isCurrentUser": false
+    },
+    {
+      "rank": 3,
+      "userId": "uuid",
+      "username": "player_one",
+      "score": 1500,
+      "isCurrentUser": true
+    }
+  ]
 }
 ```
+
+**Architecture:**
+
+```text
+/me Request
+        │
+        ├─────────────────► Redis Sorted Set
+        │                    ZREVRANK → user rank
+        │                    ZSCORE → current best score
+        │                    ZCARD → total players
+        │                    ZREVRANGE → nearby players
+        │
+        └─────────────────► PostgreSQL
+                             findByIds → usernames/user metadata
+```
+
+Redis provides real-time ranking, best score, total player count, and nearby players. PostgreSQL is only used to resolve user metadata (username) for the ranked entries. Score history remains in PostgreSQL and is never used for ranking.
 
 **Error Responses:**
 
@@ -596,6 +636,15 @@ Retrieve the authenticated user's ranking in a game. Requires `Authorization: Be
 }
 ```
 
+```json
+{
+  "error": {
+    "code": "LEADERBOARD_UNAVAILABLE",
+    "message": "Leaderboard is temporarily unavailable."
+  }
+}
+```
+
 ### Future Phases
 
 - `GET  /api/v1/games/:gameId/scores/history`
@@ -605,16 +654,17 @@ Retrieve the authenticated user's ranking in a game. Requires `Authorization: Be
 
 ## Current Phase
 
-**Phase 7 — Leaderboard API** (Complete)
+**Phase 8 — User Ranking** (Complete)
 
-- `GET /api/v1/leaderboards/:gameId?page=1&limit=20` — Paginated leaderboard (public)
-- `GET /api/v1/leaderboards/:gameId/me` — Authenticated user ranking
-- Redis Sorted Set drives ranking, ordering, pagination, and total player count
+- `GET /api/v1/leaderboards/:gameId/me` — Authenticated user ranking with nearby players
+- Redis `ZREVRANK` provides zero-based rank, converted to one-based API rank
+- Redis `ZSCORE` provides current best score
+- Redis `ZCARD` provides total ranked players
+- Redis `ZREVRANGE` provides nearby players around the authenticated user
 - PostgreSQL resolves usernames via batched `findByIds` to avoid N+1 queries
-- Global ranks are preserved across pages
-- Empty leaderboards and pages beyond the last page return 200 with empty entries
+- Boundary conditions handled for top and bottom of leaderboard
 
 ## Future Phases
 
-- **Phase 8** — Server-Sent Events (SSE) for real-time leaderboard updates
-- **Phase 9** — Reports and analytics
+- **Phase 9** — Server-Sent Events (SSE) for real-time leaderboard updates
+- **Phase 10** — Reports and analytics

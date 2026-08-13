@@ -454,6 +454,148 @@ describe("Leaderboard Endpoints", () => {
     });
   });
 
+  describe("Phase 8 — nearby players", () => {
+    it("should include nearby players around authenticated user", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/v1/leaderboards/${gameIdA}/me`,
+        headers: {
+          authorization: `Bearer ${userAToken}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.userId).toBe(userIdA);
+      expect(body.rank).toBe(3);
+      expect(body.score).toBe(1500);
+      expect(body.totalPlayers).toBe(3);
+      expect(body.nearbyPlayers).toHaveLength(3);
+      expect(body.nearbyPlayers[0]).toEqual({
+        rank: 1,
+        userId: userIdB,
+        username: `leaderuserB_${unique}`,
+        score: 2200,
+        isCurrentUser: false,
+      });
+      expect(body.nearbyPlayers[1]).toEqual({
+        rank: 2,
+        userId: userIdC,
+        username: `leaderuserC_${unique}`,
+        score: 1800,
+        isCurrentUser: false,
+      });
+      expect(body.nearbyPlayers[2]).toEqual({
+        rank: 3,
+        userId: userIdA,
+        username: `leaderuserA_${unique}`,
+        score: 1500,
+        isCurrentUser: true,
+      });
+    });
+
+    it("should mark current user in nearby players", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/v1/leaderboards/${gameIdA}/me`,
+        headers: {
+          authorization: `Bearer ${userBToken}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.nearbyPlayers.some((p: { isCurrentUser: boolean }) => p.isCurrentUser)).toBe(true);
+      expect(body.nearbyPlayers.find((p: { userId: string }) => p.userId === userIdB).isCurrentUser).toBe(true);
+    });
+
+    it("should clamp nearby players at top boundary", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/v1/leaderboards/${gameIdA}/me`,
+        headers: {
+          authorization: `Bearer ${userBToken}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.nearbyPlayers[0].rank).toBe(1);
+    });
+
+    it("should clamp nearby players at bottom boundary", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/v1/leaderboards/${gameIdA}/me`,
+        headers: {
+          authorization: `Bearer ${userAToken}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.nearbyPlayers[body.nearbyPlayers.length - 1].rank).toBe(3);
+    });
+
+    it("should include totalPlayers from Redis", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/v1/leaderboards/${gameIdA}/me`,
+        headers: {
+          authorization: `Bearer ${userAToken}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.totalPlayers).toBe(3);
+    });
+
+    it("should return 404 for user with no score", async () => {
+      const newUserResponse = await app.inject({
+        method: "POST",
+        url: "/api/v1/auth/register",
+        body: {
+          username: `nearnorank_${unique}`,
+          email: `nearnorank_${unique}@example.com`,
+          password: "secure-password-123",
+        },
+      });
+      expect(newUserResponse.statusCode).toBe(201);
+
+      const newLoginResponse = await app.inject({
+        method: "POST",
+        url: "/api/v1/auth/login",
+        body: {
+          email: `nearnorank_${unique}@example.com`,
+          password: "secure-password-123",
+        },
+      });
+      const newToken = JSON.parse(newLoginResponse.body).accessToken;
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/v1/leaderboards/${gameIdA}/me`,
+        headers: {
+          authorization: `Bearer ${newToken}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body);
+      expect(body.error.code).toBe("USER_NOT_RANKED");
+
+      await app.prisma.user.deleteMany({
+        where: {
+          OR: [
+            { username: { contains: `nearnorank_${unique}` } },
+            { email: { contains: `nearnorank_${unique}` } },
+          ],
+        },
+      });
+    });
+  });
+
   describe("ranking dynamics", () => {
     it("should update ranking when a higher score is submitted", async () => {
       await app.inject({

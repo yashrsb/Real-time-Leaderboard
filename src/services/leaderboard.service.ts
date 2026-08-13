@@ -28,6 +28,13 @@ export type MyRanking = {
   score: number;
   rank: number;
   totalPlayers: number;
+  nearbyPlayers: Array<{
+    rank: number;
+    userId: string;
+    username: string;
+    score: number;
+    isCurrentUser: boolean;
+  }>;
 };
 
 export class LeaderboardService {
@@ -110,25 +117,56 @@ export class LeaderboardService {
     }
 
     try {
-      const [score, rank, totalPlayers] = await Promise.all([
-        this.leaderboardRedisService.getUserScore(gameId, userId),
-        this.leaderboardRedisService.getUserRank(gameId, userId),
-        this.leaderboardRedisService.getPlayerCount(gameId),
-      ]);
+      const [score, redisRank, totalPlayers, nearbyPlayers] =
+        await Promise.all([
+          this.leaderboardRedisService.getUserScore(gameId, userId),
+          this.leaderboardRedisService.getUserRank(gameId, userId),
+          this.leaderboardRedisService.getPlayerCount(gameId),
+          this.leaderboardRedisService.getNearbyPlayers(gameId, userId),
+        ]);
 
-      if (score === null || rank === null) {
+      if (score === null || redisRank === null) {
         throw notFound(
           "USER_NOT_RANKED",
           "User has not submitted a score for this game.",
         );
       }
 
+      const nearbyUserIds = nearbyPlayers.map((p) => p.userId);
+      const users = await this.userRepository.findByIds(nearbyUserIds);
+      const userMap = new Map(users.map((u) => [u.id, u.username]));
+
+      const rank = redisRank + 1;
+      const nearbyRadius = 2;
+      const nearbyStart = Math.max(0, redisRank - nearbyRadius);
+
+      const formattedNearbyPlayers = nearbyPlayers.map((player, index) => {
+        const username = userMap.get(player.userId);
+        if (!username) {
+          if (typeof console !== "undefined") {
+            console.warn(
+              `[leaderboard] Orphaned Redis member for game ${gameId}: user ${player.userId} not found in PostgreSQL`,
+            );
+          }
+          return null;
+        }
+
+        return {
+          rank: nearbyStart + index + 1,
+          userId: player.userId,
+          username,
+          score: player.score,
+          isCurrentUser: player.userId === userId,
+        };
+      }).filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+
       return {
         gameId,
         userId,
         score,
-        rank: rank + 1,
+        rank,
         totalPlayers,
+        nearbyPlayers: formattedNearbyPlayers,
       };
     } catch (error) {
       if ((error as { statusCode?: number }).statusCode === 404) {

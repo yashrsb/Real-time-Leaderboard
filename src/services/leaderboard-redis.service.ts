@@ -102,4 +102,34 @@ export class LeaderboardRedisService {
     // ZCARD: retrieve total number of leaderboard members
     return await this.redis.zcard(key);
   }
+
+  async getNearbyPlayers(
+    gameId: string,
+    userId: string,
+    radius: number = 2,
+  ): Promise<{ userId: string; score: number }[]> {
+    const key = this.getGameLeaderboardKey(gameId);
+    const member = this.getMemberKey(userId);
+
+    const redisRank = await this.redis.zrevrank(key, member);
+    if (redisRank === null || redisRank === undefined) {
+      return [];
+    }
+
+    const start = Math.max(0, redisRank - radius);
+    const stop = redisRank + radius;
+
+    const raw = await this.redis.zrevrange(key, start, stop, "WITHSCORES");
+
+    const players: { userId: string; score: number }[] = [];
+    for (let i = 0; i < raw.length; i += 2) {
+      const member = raw[i];
+      const score = raw[i + 1];
+      if (member && score) {
+        const parsedUserId = member.replace(/^user:/, "");
+        players.push({ userId: parsedUserId, score: Number(score) });
+      }
+    }
+    return players;
+  }
 }

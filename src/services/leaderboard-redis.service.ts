@@ -54,15 +54,17 @@ export class LeaderboardRedisService {
     gameId: string,
     limit: number,
   ): Promise<{ userId: string; score: number }[]> {
+    return this.getLeaderboardPage(gameId, 0, Math.max(0, limit - 1));
+  }
+
+  async getLeaderboardPage(
+    gameId: string,
+    start: number,
+    stop: number,
+  ): Promise<{ userId: string; score: number }[]> {
     const key = this.getGameLeaderboardKey(gameId);
 
-    // ZREVRANGE: retrieve highest scores first
-    const raw = await this.redis.zrevrange(
-      key,
-      0,
-      Math.max(0, limit - 1),
-      "WITHSCORES",
-    );
+    const raw = await this.redis.zrevrange(key, start, stop, "WITHSCORES");
 
     const players: { userId: string; score: number }[] = [];
     for (let i = 0; i < raw.length; i += 2) {

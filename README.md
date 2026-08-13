@@ -469,27 +469,152 @@ leaderboard:game:{gameId}
 user:{userId}
 ```
 
+### Leaderboard
+
+#### GET /api/v1/leaderboards/:gameId
+
+Retrieve the paginated leaderboard for a game. Public endpoint.
+
+**Query Parameters:**
+
+| Parameter | Type    | Default | Constraints       |
+| --------- | ------- | ------- | ----------------- |
+| `page`    | integer | `1`     | `>= 1`            |
+| `limit`   | integer | `20`    | `>= 1, <= 100`    |
+
+**Request:**
+
+```http
+GET /api/v1/leaderboards/<GAME_ID>?page=1&limit=20
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "gameId": "uuid",
+  "entries": [
+    {
+      "rank": 1,
+      "userId": "uuid",
+      "username": "player_two",
+      "score": 2200
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "totalPlayers": 42,
+    "totalPages": 3
+  }
+}
+```
+
+**Empty leaderboard (200 OK):**
+
+```json
+{
+  "gameId": "uuid",
+  "entries": [],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "totalPlayers": 0,
+    "totalPages": 0
+  }
+}
+```
+
+**Error Responses:**
+
+```json
+{
+  "error": {
+    "code": "GAME_NOT_FOUND",
+    "message": "Game not found."
+  }
+}
+```
+
+```json
+{
+  "error": {
+    "code": "LEADERBOARD_UNAVAILABLE",
+    "message": "Leaderboard is temporarily unavailable."
+  }
+}
+```
+
+**Architecture:**
+
+```text
+Leaderboard Request
+        │
+        ├─────────────────► Redis Sorted Set
+        │                    ZREVRANGE → ranked entries
+        │                    ZCARD → total player count
+        │
+        └─────────────────► PostgreSQL
+                             findByIds → usernames/user metadata
+```
+
+Redis provides all ranking, ordering, pagination, and total player count. PostgreSQL is only used to resolve user metadata (username) for the ranked entries returned by Redis. Score history remains in PostgreSQL and is never used for leaderboard ordering.
+
+#### GET /api/v1/leaderboards/:gameId/me
+
+Retrieve the authenticated user's ranking in a game. Requires `Authorization: Bearer <token>`.
+
+**Response (200 OK):**
+
+```json
+{
+  "gameId": "uuid",
+  "userId": "uuid",
+  "score": 1500,
+  "rank": 3,
+  "totalPlayers": 42
+}
+```
+
+**Error Responses:**
+
+```json
+{
+  "error": {
+    "code": "USER_NOT_RANKED",
+    "message": "User has not submitted a score for this game."
+  }
+}
+```
+
+```json
+{
+  "error": {
+    "code": "GAME_NOT_FOUND",
+    "message": "Game not found."
+  }
+}
+```
+
 ### Future Phases
 
 - `GET  /api/v1/games/:gameId/scores/history`
 - `GET  /api/v1/leaderboards/global`
-- `GET  /api/v1/leaderboards/:gameId`
-- `GET  /api/v1/leaderboards/:gameId/me`
 - `GET  /api/v1/leaderboards/:gameId/stream`
 - `GET  /api/v1/reports/top-players`
 
 ## Current Phase
 
-**Phase 5 — Score Submission** (Complete)
+**Phase 7 — Leaderboard API** (Complete)
 
-- `POST /api/v1/games/:gameId/scores` — Submit a score (authenticated)
-- Every submission persisted as immutable PostgreSQL history
-- Redis Sorted Set maintains highest score per user per game
-- Atomic best-score updates via Lua script
+- `GET /api/v1/leaderboards/:gameId?page=1&limit=20` — Paginated leaderboard (public)
+- `GET /api/v1/leaderboards/:gameId/me` — Authenticated user ranking
+- Redis Sorted Set drives ranking, ordering, pagination, and total player count
+- PostgreSQL resolves usernames via batched `findByIds` to avoid N+1 queries
+- Global ranks are preserved across pages
+- Empty leaderboards and pages beyond the last page return 200 with empty entries
 
 ## Future Phases
 
-- **Phase 6** — Redis leaderboard (Sorted Sets)
-- **Phase 7** — Leaderboard API endpoints
-- **Phase 8** — Server-Sent Events (SSE) for real-time updates
+- **Phase 8** — Server-Sent Events (SSE) for real-time leaderboard updates
 - **Phase 9** — Reports and analytics

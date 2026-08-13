@@ -3,7 +3,8 @@ import { z } from "zod";
 import { LeaderboardService } from "../services/leaderboard.service";
 import { badRequest, unauthorized } from "../utils/errors";
 
-const limitSchema = z.coerce.number().int().min(1).max(100).default(10);
+const pageSchema = z.coerce.number().int().min(1).default(1);
+const limitSchema = z.coerce.number().int().min(1).max(100).default(20);
 
 export class LeaderboardController {
   constructor(private readonly leaderboardService: LeaderboardService) {}
@@ -20,6 +21,13 @@ export class LeaderboardController {
       throw badRequest("VALIDATION_ERROR", "Invalid request.");
     }
 
+    const pageParsed = pageSchema.safeParse(
+      (request.query as { page?: string | number }).page,
+    );
+    if (!pageParsed.success) {
+      throw badRequest("VALIDATION_ERROR", "Invalid request.");
+    }
+
     const limitParsed = limitSchema.safeParse(
       (request.query as { limit?: string | number }).limit,
     );
@@ -29,6 +37,7 @@ export class LeaderboardController {
 
     const result = await this.leaderboardService.getLeaderboard(
       gameId,
+      pageParsed.data,
       limitParsed.data,
     );
     return reply.send(result);

@@ -26,6 +26,8 @@ describe("Leaderboard Endpoints", () => {
   let gameIdA: string;
   let gameIdB: string;
 
+  const paginationUsers: Array<{ userId: string }> = [];
+
   beforeAll(async () => {
     process.env.NODE_ENV = "test";
     process.env.JWT_SECRET = mockEnv.JWT_SECRET;
@@ -126,10 +128,15 @@ describe("Leaderboard Endpoints", () => {
 
   afterAll(async () => {
     if (app) {
+      const allUserIds = [
+        userIdA,
+        userIdB,
+        userIdC,
+        ...paginationUsers.map((u) => u.userId),
+      ];
+
       await app.prisma.score.deleteMany({
-        where: {
-          OR: [{ userId: userIdA }, { userId: userIdB }, { userId: userIdC }],
-        },
+        where: { userId: { in: allUserIds } },
       });
       await app.prisma.game.deleteMany({
         where: {
@@ -152,6 +159,8 @@ describe("Leaderboard Endpoints", () => {
             { email: { contains: `leaderB_${unique}` } },
             { username: { contains: `leaderuserC_${unique}` } },
             { email: { contains: `leaderC_${unique}` } },
+            { username: { contains: `pageuser_${unique}` } },
+            { email: { contains: `page_${unique}` } },
           ],
         },
       });
@@ -179,23 +188,32 @@ describe("Leaderboard Endpoints", () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.gameId).toBe(gameIdA);
-      expect(body.players).toHaveLength(3);
-      expect(body.players[0]).toEqual({
+      expect(body.entries).toHaveLength(3);
+      expect(body.entries[0]).toEqual({
         rank: 1,
         userId: userIdB,
+        username: `leaderuserB_${unique}`,
         score: 2200,
       });
-      expect(body.players[1]).toEqual({
+      expect(body.entries[1]).toEqual({
         rank: 2,
         userId: userIdC,
+        username: `leaderuserC_${unique}`,
         score: 1800,
       });
-      expect(body.players[2]).toEqual({
+      expect(body.entries[2]).toEqual({
         rank: 3,
         userId: userIdA,
+        username: `leaderuserA_${unique}`,
         score: 1500,
       });
       expect(body.totalPlayers).toBe(3);
+      expect(body.pagination).toEqual({
+        page: 1,
+        limit: 20,
+        totalPlayers: 3,
+        totalPages: 1,
+      });
     });
 
     it("should respect limit query parameter", async () => {
@@ -206,8 +224,9 @@ describe("Leaderboard Endpoints", () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body.players).toHaveLength(1);
-      expect(body.players[0].userId).toBe(userIdB);
+      expect(body.entries).toHaveLength(1);
+      expect(body.entries[0].userId).toBe(userIdB);
+      expect(body.entries[0].rank).toBe(1);
     });
 
     it("should respect maximum limit of 100", async () => {
@@ -218,7 +237,7 @@ describe("Leaderboard Endpoints", () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body.players.length).toBeLessThanOrEqual(3);
+      expect(body.entries.length).toBeLessThanOrEqual(3);
     });
 
     it("should return empty array for game with no scores", async () => {
@@ -229,8 +248,14 @@ describe("Leaderboard Endpoints", () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body.players).toEqual([]);
+      expect(body.entries).toEqual([]);
       expect(body.totalPlayers).toBe(0);
+      expect(body.pagination).toEqual({
+        page: 1,
+        limit: 20,
+        totalPlayers: 0,
+        totalPages: 0,
+      });
     });
 
     it("should return 404 for nonexistent game", async () => {
@@ -278,9 +303,54 @@ describe("Leaderboard Endpoints", () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body.players).toHaveLength(1);
-      expect(body.players[0].userId).toBe(userIdA);
-      expect(body.players[0].score).toBe(5000);
+      expect(body.entries).toHaveLength(1);
+      expect(body.entries[0].userId).toBe(userIdA);
+      expect(body.entries[0].score).toBe(5000);
+      expect(body.entries[0].username).toBe(`leaderuserA_${unique}`);
+    });
+
+    it("should return correct global ranks on page 2", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/v1/leaderboards/${gameIdA}?page=2&limit=2`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.entries).toHaveLength(1);
+      expect(body.entries[0].rank).toBe(3);
+      expect(body.entries[0].userId).toBe(userIdA);
+    });
+
+    it("should return empty entries for page beyond last page", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/v1/leaderboards/${gameIdA}?page=2&limit=5`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.entries).toEqual([]);
+      expect(body.totalPlayers).toBe(3);
+      expect(body.pagination.totalPages).toBe(1);
+    });
+
+    it("should reject invalid page values", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/v1/leaderboards/${gameIdA}?page=0`,
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it("should reject invalid limit values", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/v1/leaderboards/${gameIdA}?limit=101`,
+      });
+
+      expect(response.statusCode).toBe(400);
     });
   });
 
@@ -400,8 +470,8 @@ describe("Leaderboard Endpoints", () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body.players[0].userId).toBe(userIdA);
-      expect(body.players[0].score).toBe(2500);
+      expect(body.entries[0].userId).toBe(userIdA);
+      expect(body.entries[0].score).toBe(2500);
     });
 
     it("should not reduce rank when a lower score is submitted", async () => {
@@ -439,10 +509,250 @@ describe("Leaderboard Endpoints", () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      const topPlayers = body.players.filter(
-        (p: { userId: string; score: number }) => p.score === 2500,
+      const topEntries = body.entries.filter(
+        (e: { userId: string; score: number }) => e.score === 2500,
       );
-      expect(topPlayers.length).toBe(2);
+      expect(topEntries.length).toBe(2);
+    });
+  });
+
+  describe("Phase 7 — pagination", () => {
+    it("Test 1 — default pagination returns 20 entries with correct ranks", async () => {
+      for (let i = 0; i < 12; i++) {
+        const username = `pageuser_${unique}_${i}`;
+        const email = `page_${unique}_${i}@example.com`;
+        const password = "secure-password-123";
+
+        const registerResponse = await app.inject({
+          method: "POST",
+          url: "/api/v1/auth/register",
+          body: { username, email, password },
+        });
+        expect(registerResponse.statusCode).toBe(201);
+
+        const loginResponse = await app.inject({
+          method: "POST",
+          url: "/api/v1/auth/login",
+          body: { email, password },
+        });
+        const loginBody = JSON.parse(loginResponse.body);
+        paginationUsers.push({ userId: loginBody.user.id });
+
+        await app.inject({
+          method: "POST",
+          url: `/api/v1/games/${gameIdA}/scores`,
+          headers: { authorization: `Bearer ${loginBody.accessToken}` },
+          body: { score: (i + 1) * 100 },
+        });
+      }
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/v1/leaderboards/${gameIdA}?page=1&limit=20`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.entries).toHaveLength(15);
+      expect(body.entries[0].rank).toBe(1);
+      expect(body.entries[14].rank).toBe(15);
+      expect(body.totalPlayers).toBe(15);
+      expect(body.pagination.totalPages).toBe(1);
+    }, 60000);
+
+    it("Test 2 — second page returns remaining entries with global ranks", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/v1/leaderboards/${gameIdA}?page=2&limit=5`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.entries).toHaveLength(5);
+      expect(body.entries[0].rank).toBe(6);
+      expect(body.entries[4].rank).toBe(10);
+    });
+
+    it("Test 3 — custom limit returns correct number of entries", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/v1/leaderboards/${gameIdA}?page=1&limit=5`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.entries).toHaveLength(5);
+      expect(body.entries[0].rank).toBe(1);
+      expect(body.entries[4].rank).toBe(5);
+    });
+
+    it("Test 4 — pagination across pages with limit=10", async () => {
+      const responsePage1 = await app.inject({
+        method: "GET",
+        url: `/api/v1/leaderboards/${gameIdA}?page=1&limit=10`,
+      });
+      const body1 = JSON.parse(responsePage1.body);
+      expect(body1.entries).toHaveLength(10);
+      expect(body1.entries[0].rank).toBe(1);
+      expect(body1.entries[9].rank).toBe(10);
+
+      const responsePage2 = await app.inject({
+        method: "GET",
+        url: `/api/v1/leaderboards/${gameIdA}?page=2&limit=10`,
+      });
+      const body2 = JSON.parse(responsePage2.body);
+      expect(body2.entries).toHaveLength(5);
+      expect(body2.entries[0].rank).toBe(11);
+      expect(body2.entries[4].rank).toBe(15);
+
+      const responsePage3 = await app.inject({
+        method: "GET",
+        url: `/api/v1/leaderboards/${gameIdA}?page=3&limit=10`,
+      });
+      const body3 = JSON.parse(responsePage3.body);
+      expect(body3.entries).toHaveLength(0);
+      expect(body3.pagination.totalPages).toBe(2);
+    });
+
+    it("Test 5 — global rank continues across pages", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/v1/leaderboards/${gameIdA}?page=2&limit=5`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.entries[0].rank).toBe(6);
+    });
+
+    it("Test 6 — entries contain usernames resolved from PostgreSQL", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/v1/leaderboards/${gameIdA}?page=1&limit=5`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      for (const entry of body.entries) {
+        expect(entry.userId).toBeDefined();
+        expect(entry.username).toBeDefined();
+        expect(entry.username.length).toBeGreaterThan(0);
+      }
+    });
+
+    it("Test 8 — totalPlayers matches Redis member count", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/v1/leaderboards/${gameIdA}?page=1&limit=20`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.totalPlayers).toBe(15);
+      expect(body.pagination.totalPlayers).toBe(15);
+    });
+
+    it("Test 11 — invalid pagination returns 400", async () => {
+      const cases = [
+        { page: "0", limit: "20" },
+        { page: "-1", limit: "20" },
+        { page: "abc", limit: "20" },
+        { page: "1", limit: "0" },
+        { page: "1", limit: "-1" },
+        { page: "1", limit: "101" },
+        { page: "1", limit: "abc" },
+      ];
+
+      for (const params of cases) {
+        const response = await app.inject({
+          method: "GET",
+          url: `/api/v1/leaderboards/${gameIdA}?page=${params.page}&limit=${params.limit}`,
+        });
+
+        expect(response.statusCode).toBe(400);
+      }
+    });
+
+    it("Test 12 — invalid game ID returns 400", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/v1/leaderboards/not-a-uuid?page=1&limit=20",
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it("Test 13 — nonexistent game returns 404", async () => {
+      const fakeId = "00000000-0000-0000-0000-000000000000";
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/v1/leaderboards/${fakeId}?page=1&limit=20`,
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body);
+      expect(body.error.code).toBe("GAME_NOT_FOUND");
+    });
+
+    it("Test 14 — multiple games remain isolated", async () => {
+      const responseA = await app.inject({
+        method: "GET",
+        url: `/api/v1/leaderboards/${gameIdA}?page=1&limit=100`,
+      });
+      const bodyA = JSON.parse(responseA.body);
+      const usersInA = new Set(bodyA.entries.map((e: { userId: string }) => e.userId));
+
+      const responseB = await app.inject({
+        method: "GET",
+        url: `/api/v1/leaderboards/${gameIdB}?page=1&limit=100`,
+      });
+      const bodyB = JSON.parse(responseB.body);
+      const usersInB = new Set(bodyB.entries.map((e: { userId: string }) => e.userId));
+
+      for (const userId of usersInB) {
+        if (userId === userIdA) continue;
+        expect(usersInA.has(userId)).toBe(false);
+      }
+    });
+
+    it("Test 15 — higher score changes ranking", async () => {
+      await app.inject({
+        method: "POST",
+        url: `/api/v1/games/${gameIdA}/scores`,
+        headers: { authorization: `Bearer ${userAToken}` },
+        body: { score: 3000 },
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/v1/leaderboards/${gameIdA}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      const topEntry = body.entries.find((e: { userId: string }) => e.userId === userIdA);
+      expect(topEntry).toBeDefined();
+      expect(topEntry.score).toBe(3000);
+    });
+
+    it("Test 16 — lower score does not change leaderboard score", async () => {
+      await app.inject({
+        method: "POST",
+        url: `/api/v1/games/${gameIdA}/scores`,
+        headers: { authorization: `Bearer ${userAToken}` },
+        body: { score: 1000 },
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/v1/leaderboards/${gameIdA}/me`,
+        headers: { authorization: `Bearer ${userAToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.score).toBe(3000);
+      expect(body.rank).toBe(1);
     });
   });
 });

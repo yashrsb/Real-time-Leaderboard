@@ -31,4 +31,11 @@ export class UserRepository {
       data,
     });
   }
+
+  async findByIds(ids: string[]): Promise<Array<{ id: string; username: string }>> {
+    return this.prisma.user.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, username: true },
+    });
+  }
 }

@@ -27,12 +27,4 @@ export async function scoreRoutes(app: FastifyInstance): Promise<void> {
       return scoreController.submit(request, reply);
     },
   );
-
-  app.get(
-    "/api/v1/games/:gameId/scores/history",
-    { preHandler: authenticate },
-    async (request, reply) => {
-      return scoreController.history(request, reply);
-    },
-  );
 }

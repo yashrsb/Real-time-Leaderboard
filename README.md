@@ -645,26 +645,184 @@ Redis provides real-time ranking, best score, total player count, and nearby pla
 }
 ```
 
+#### GET /api/v1/leaderboards/global
+
+Retrieve the paginated global leaderboard across all games. Public endpoint.
+
+**Query Parameters:**
+
+| Parameter | Type    | Default | Validation        |
+|-----------|---------|---------|-------------------|
+| `page`    | integer | `1`     | `>= 1`            |
+| `limit`   | integer | `20`    | `>= 1, <= 100`    |
+
+**Request:**
+
+```http
+GET /api/v1/leaderboards/global?page=1&limit=20
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "entries": [
+    {
+      "rank": 1,
+      "userId": "user2",
+      "username": "player2",
+      "score": 9000
+    },
+    {
+      "rank": 2,
+      "userId": "user1",
+      "username": "player1",
+      "score": 8000
+    }
+  ],
+  "totalPlayers": 42,
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "totalPlayers": 42,
+    "totalPages": 3
+  }
+}
+```
+
+#### GET /api/v1/leaderboards/global/me
+
+Retrieve the authenticated user's global ranking across all games. Requires `Authorization: Bearer <token>`.
+
+**Response (200 OK):**
+
+```json
+{
+  "userId": "user123",
+  "rank": 17,
+  "score": 14300,
+  "totalPlayers": 100
+}
+```
+
+**Response (404 Not Found):**
+
+```json
+{
+  "error": {
+    "code": "USER_NOT_RANKED",
+    "message": "User has not submitted a score for any game."
+  }
+}
+```
+
+### Global Leaderboard Semantics
+
+The global leaderboard represents:
+
+```text
+Global score = SUM(best score per game)
+```
+
+Redis key: `leaderboard:global`
+Redis member: `user:{userId}`
+
+Example:
+
+```text
+Chess:
+user1 → 1500
+user2 → 1000
+
+Trivia:
+user1 → 700
+user2 → 2000
+
+Global:
+user1 → 2200
+user2 → 3000
+```
+
+### Why Blind ZINCRBY Is Incorrect
+
+Do not execute:
+
+```redis
+ZINCRBY leaderboard:global <submittedScore> user:{userId}
+```
+
+for every score submission. This would sum all submitted scores instead of tracking best scores.
+
+Example:
+
+```text
+user1 submits 1000 → global = 1000
+user1 submits 800  → global should remain 1000
+                   → but blind ZINCRBY would produce 1800
+```
+
+### Correct Delta Model
+
+When a new game best is achieved:
+
+```text
+delta = newGameBest - oldGameBest
+```
+
+Then:
+
+```redis
+ZINCRBY leaderboard:global delta user:{userId}
+```
+
+If the submitted score is lower than or equal to the current game best, no Redis update occurs.
+
+### Atomicity
+
+Game leaderboard updates and global leaderboard updates are performed atomically inside a single Redis Lua script. This prevents race conditions during concurrent score submissions.
+
+### Architecture
+
+```text
+                         SCORE SUBMISSION
+                                │
+                                ▼
+                         PostgreSQL
+                       immutable history
+                                │
+                                ▼
+                         Redis / Lua
+                                │
+                 ┌──────────────┴──────────────┐
+                 │                             │
+                 ▼                             ▼
+       leaderboard:game:{id}          leaderboard:global
+                 │                             │
+                 │                             │
+          best score/game             SUM(best score/game)
+                 │                             │
+                 ▼                             ▼
+          Game leaderboard             Global leaderboard
+```
+
 ### Future Phases
 
 - `GET  /api/v1/games/:gameId/scores/history`
-- `GET  /api/v1/leaderboards/global`
 - `GET  /api/v1/leaderboards/:gameId/stream`
 - `GET  /api/v1/reports/top-players`
 
 ## Current Phase
 
-**Phase 8 — User Ranking** (Complete)
+**Phase 9 — Global Leaderboard** (Complete)
 
-- `GET /api/v1/leaderboards/:gameId/me` — Authenticated user ranking with nearby players
-- Redis `ZREVRANK` provides zero-based rank, converted to one-based API rank
-- Redis `ZSCORE` provides current best score
-- Redis `ZCARD` provides total ranked players
-- Redis `ZREVRANGE` provides nearby players around the authenticated user
-- PostgreSQL resolves usernames via batched `findByIds` to avoid N+1 queries
-- Boundary conditions handled for top and bottom of leaderboard
+- `GET /api/v1/leaderboards/global` — Public global leaderboard across all games
+- `GET /api/v1/leaderboards/global/me` — Authenticated user global ranking
+- Redis `leaderboard:global` stores aggregate scores as `SUM(best score per game)`
+- Global updates use delta-based `ZINCRBY` inside a single atomic Lua script
+- PostgreSQL remains immutable score history; Redis remains ranking source of truth
+- Username resolution via batched `findByIds` to avoid N+1 queries
 
 ## Future Phases
 
-- **Phase 9** — Server-Sent Events (SSE) for real-time leaderboard updates
-- **Phase 10** — Reports and analytics
+- **Phase 10** — Server-Sent Events (SSE) for real-time leaderboard updates
+- **Phase 11** — Reports and analytics

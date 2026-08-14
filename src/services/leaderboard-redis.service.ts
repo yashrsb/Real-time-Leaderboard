@@ -4,22 +4,32 @@ const BEST_SCORE_LUA = `
 local key = KEYS[1]
 local member = ARGV[1]
 local newScore = ARGV[2]
+local globalKey = ARGV[3]
 
 local existing = redis.call('ZSCORE', key, member)
 if not existing then
   redis.call('ZADD', key, newScore, member)
+  if globalKey ~= '' then
+    redis.call('ZINCRBY', globalKey, newScore, member)
+  end
   return newScore
 end
 
 local current = tonumber(existing)
 local score = tonumber(newScore)
 if score > current then
+  local delta = score - current
   redis.call('ZADD', key, score, member)
+  if globalKey ~= '' then
+    redis.call('ZINCRBY', globalKey, delta, member)
+  end
   return score
 end
 
 return current
 `;
+
+const GLOBAL_LEADERBOARD_KEY = "leaderboard:global";
 
 export class LeaderboardRedisService {
   constructor(private readonly redis: Redis) {}
@@ -32,6 +42,10 @@ export class LeaderboardRedisService {
     return `user:${userId}`;
   }
 
+  getGlobalLeaderboardKey(): string {
+    return GLOBAL_LEADERBOARD_KEY;
+  }
+
   async updateBestScore(
     gameId: string,
     userId: string,
@@ -39,6 +53,7 @@ export class LeaderboardRedisService {
   ): Promise<number> {
     const key = this.getGameLeaderboardKey(gameId);
     const member = this.getMemberKey(userId);
+    const globalKey = this.getGlobalLeaderboardKey();
 
     const result = await this.redis.eval(
       BEST_SCORE_LUA,
@@ -46,6 +61,7 @@ export class LeaderboardRedisService {
       key,
       member,
       String(score),
+      globalKey,
     );
     return result as number;
   }
@@ -131,5 +147,46 @@ export class LeaderboardRedisService {
       }
     }
     return players;
+  }
+
+  async getGlobalLeaderboardPage(
+    start: number,
+    stop: number,
+  ): Promise<{ userId: string; score: number }[]> {
+    const key = this.getGlobalLeaderboardKey();
+
+    const raw = await this.redis.zrevrange(key, start, stop, "WITHSCORES");
+
+    const players: { userId: string; score: number }[] = [];
+    for (let i = 0; i < raw.length; i += 2) {
+      const member = raw[i];
+      const score = raw[i + 1];
+      if (member && score) {
+        const parsedUserId = member.replace(/^user:/, "");
+        players.push({ userId: parsedUserId, score: Number(score) });
+      }
+    }
+    return players;
+  }
+
+  async getGlobalUserScore(userId: string): Promise<number | null> {
+    const key = this.getGlobalLeaderboardKey();
+    const member = this.getMemberKey(userId);
+
+    const raw = await this.redis.zscore(key, member);
+    return raw ? Number(raw) : null;
+  }
+
+  async getGlobalUserRank(userId: string): Promise<number | null> {
+    const key = this.getGlobalLeaderboardKey();
+    const member = this.getMemberKey(userId);
+
+    const raw = await this.redis.zrevrank(key, member);
+    return raw !== null && raw !== undefined ? raw : null;
+  }
+
+  async getGlobalPlayerCount(): Promise<number> {
+    const key = this.getGlobalLeaderboardKey();
+    return await this.redis.zcard(key);
   }
 }

@@ -477,10 +477,10 @@ Retrieve the paginated leaderboard for a game. Public endpoint.
 
 **Query Parameters:**
 
-| Parameter | Type    | Default | Constraints       |
-| --------- | ------- | ------- | ----------------- |
-| `page`    | integer | `1`     | `>= 1`            |
-| `limit`   | integer | `20`    | `>= 1, <= 100`    |
+| Parameter | Type    | Default | Constraints    |
+| --------- | ------- | ------- | -------------- |
+| `page`    | integer | `1`     | `>= 1`         |
+| `limit`   | integer | `20`    | `>= 1, <= 100` |
 
 **Request:**
 
@@ -651,10 +651,10 @@ Retrieve the paginated global leaderboard across all games. Public endpoint.
 
 **Query Parameters:**
 
-| Parameter | Type    | Default | Validation        |
-|-----------|---------|---------|-------------------|
-| `page`    | integer | `1`     | `>= 1`            |
-| `limit`   | integer | `20`    | `>= 1, <= 100`    |
+| Parameter | Type    | Default | Validation     |
+| --------- | ------- | ------- | -------------- |
+| `page`    | integer | `1`     | `>= 1`         |
+| `limit`   | integer | `20`    | `>= 1, <= 100` |
 
 **Request:**
 
@@ -805,24 +805,158 @@ Game leaderboard updates and global leaderboard updates are performed atomically
           Game leaderboard             Global leaderboard
 ```
 
+### Score History
+
+#### GET /api/v1/games/:gameId/scores/history
+
+Retrieve the immutable score submission history for a game. Requires `Authorization: Bearer <token>`.
+
+**Query Parameters:**
+
+| Parameter | Type    | Default | Validation           |
+| --------- | ------- | ------- | -------------------- |
+| `page`    | integer | `1`     | `>= 1`               |
+| `limit`   | integer | `20`    | `>= 1, <= 100`       |
+| `from`    | date    | -       | ISO date (inclusive) |
+| `to`      | date    | -       | ISO date (inclusive) |
+
+**Request:**
+
+```http
+GET /api/v1/games/<GAME_ID>/scores/history?page=1&limit=20&from=2026-08-01&to=2026-08-10
+Authorization: Bearer <ACCESS_TOKEN>
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "gameId": "uuid",
+  "items": [
+    {
+      "score": 1500,
+      "createdAt": "2026-08-10T10:05:00.000Z"
+    },
+    {
+      "score": 1200,
+      "createdAt": "2026-08-10T10:00:00.000Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "totalItems": 42,
+    "totalPages": 3
+  }
+}
+```
+
+**Empty history (200 OK):**
+
+```json
+{
+  "gameId": "uuid",
+  "items": [],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "totalItems": 0,
+    "totalPages": 0
+  }
+}
+```
+
+**Architecture:**
+
+```text
+Score Submission
+        │
+        ├──────────────► PostgreSQL
+        │                 Immutable score history
+        │
+        └──────────────► Redis
+                          Current best score
+                          Sorted Set leaderboard
+
+History Request
+        │
+        ▼
+    PostgreSQL
+        │
+        ├── WHERE gameId = ?
+        ├── ORDER BY createdAt DESC, id DESC
+        ├── LIMIT ? OFFSET ?
+        └── COUNT(*) WHERE same filters
+```
+
+**PostgreSQL vs Redis:**
+
+PostgreSQL stores every score submission as immutable history. Redis maintains only each user's highest score per game for fast leaderboard queries.
+
+Example:
+
+```text
+Submissions: 1000 → 1500 → 1200
+
+PostgreSQL:
+  1000
+  1500
+  1200
+
+Redis (best score):
+  user1 → 1500
+```
+
+Therefore:
+
+- **Leaderboard endpoint** returns `1500`
+- **History endpoint** returns `1200, 1500, 1000`
+
+This separation ensures historical accuracy while maintaining real-time ranking performance.
+
+**Date Semantics:**
+
+- `from` is inclusive: `from=2026-08-01` means `>= 2026-08-01 00:00:00`
+- `to` is inclusive: `to=2026-08-10` includes the entire day of August 10
+- Internally uses a half-open interval: `createdAt >= from AND createdAt < to + 1 day`
+- This avoids precision problems at midnight boundaries
+
+**Error Responses:**
+
+```json
+{
+  "error": {
+    "code": "GAME_NOT_FOUND",
+    "message": "Game not found."
+  }
+}
+```
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Invalid request."
+  }
+}
+```
+
 ### Future Phases
 
-- `GET  /api/v1/games/:gameId/scores/history`
 - `GET  /api/v1/leaderboards/:gameId/stream`
 - `GET  /api/v1/reports/top-players`
 
 ## Current Phase
 
-**Phase 9 — Global Leaderboard** (Complete)
+**Phase 10 — Score History** (Complete)
 
-- `GET /api/v1/leaderboards/global` — Public global leaderboard across all games
-- `GET /api/v1/leaderboards/global/me` — Authenticated user global ranking
-- Redis `leaderboard:global` stores aggregate scores as `SUM(best score per game)`
-- Global updates use delta-based `ZINCRBY` inside a single atomic Lua script
-- PostgreSQL remains immutable score history; Redis remains ranking source of truth
-- Username resolution via batched `findByIds` to avoid N+1 queries
+- `GET /api/v1/games/:gameId/scores/history` — Authenticated immutable score history from PostgreSQL
+- Supports pagination (`page`, `limit`) and date filtering (`from`, `to`)
+- PostgreSQL provides filtering, ordering, and pagination; Redis is not used for historical data
+- Newest submissions returned first with deterministic tie-breaking via `id DESC`
+- Count query uses the same filters as the history query for accurate pagination metadata
 
 ## Future Phases
 
-- **Phase 10** — Server-Sent Events (SSE) for real-time leaderboard updates
-- **Phase 11** — Reports and analytics
+- **Phase 11** — Server-Sent Events (SSE) for real-time leaderboard updates
+- **Phase 12** — Reports and analytics

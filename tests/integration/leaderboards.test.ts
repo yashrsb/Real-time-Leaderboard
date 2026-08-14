@@ -897,4 +897,227 @@ describe("Leaderboard Endpoints", () => {
       expect(body.rank).toBe(1);
     });
   });
+
+  describe("Phase 9 — global leaderboard", () => {
+    it("should return global leaderboard with pagination", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/v1/leaderboards/global?page=1&limit=20",
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.entries.length).toBeGreaterThan(0);
+      expect(body.entries.length).toBeLessThanOrEqual(20);
+      expect(body.totalPlayers).toBeGreaterThanOrEqual(body.entries.length);
+      expect(body.pagination.page).toBe(1);
+      expect(body.pagination.limit).toBe(20);
+    });
+
+    it("should order global leaderboard by sum of best scores", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/v1/leaderboards/global?page=1&limit=20",
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      for (let i = 0; i < body.entries.length - 1; i++) {
+        expect(body.entries[i].score).toBeGreaterThanOrEqual(body.entries[i + 1].score);
+      }
+    });
+
+    it("should include usernames resolved from PostgreSQL", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/v1/leaderboards/global?page=1&limit=20",
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      for (const entry of body.entries) {
+        expect(entry.userId).toBeDefined();
+        expect(entry.username).toBeDefined();
+        expect(entry.username.length).toBeGreaterThan(0);
+      }
+    });
+
+    it("should return 401 for unauthenticated global /me", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/v1/leaderboards/global/me",
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it("should return correct global rank and score for authenticated user", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/v1/leaderboards/global/me",
+        headers: {
+          authorization: `Bearer ${userAToken}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.userId).toBe(userIdA);
+      expect(body.rank).toBeGreaterThanOrEqual(1);
+      expect(body.totalPlayers).toBeGreaterThanOrEqual(1);
+    });
+
+    it("should update global score by delta when game best increases", async () => {
+      const beforeResponse = await app.inject({
+        method: "GET",
+        url: "/api/v1/leaderboards/global/me",
+        headers: {
+          authorization: `Bearer ${userAToken}`,
+        },
+      });
+      const beforeBody = JSON.parse(beforeResponse.body);
+      const oldGlobalScore = beforeBody.score;
+
+      const gameBestBeforeResponse = await app.inject({
+        method: "GET",
+        url: `/api/v1/leaderboards/${gameIdA}/me`,
+        headers: {
+          authorization: `Bearer ${userAToken}`,
+        },
+      });
+      const gameBestBefore = JSON.parse(gameBestBeforeResponse.body).score;
+
+      const newGameScore = gameBestBefore + 1000;
+      await app.inject({
+        method: "POST",
+        url: `/api/v1/games/${gameIdA}/scores`,
+        headers: { authorization: `Bearer ${userAToken}` },
+        body: { score: newGameScore },
+      });
+
+      const afterResponse = await app.inject({
+        method: "GET",
+        url: "/api/v1/leaderboards/global/me",
+        headers: {
+          authorization: `Bearer ${userAToken}`,
+        },
+      });
+      const afterBody = JSON.parse(afterResponse.body);
+
+      expect(afterBody.score).toBe(oldGlobalScore + 1000);
+    });
+
+    it("should not change global score when lower score is submitted", async () => {
+      const beforeResponse = await app.inject({
+        method: "GET",
+        url: "/api/v1/leaderboards/global/me",
+        headers: {
+          authorization: `Bearer ${userAToken}`,
+        },
+      });
+      const beforeBody = JSON.parse(beforeResponse.body);
+      const oldGlobalScore = beforeBody.score;
+
+      await app.inject({
+        method: "POST",
+        url: `/api/v1/games/${gameIdA}/scores`,
+        headers: { authorization: `Bearer ${userAToken}` },
+        body: { score: 1 },
+      });
+
+      const afterResponse = await app.inject({
+        method: "GET",
+        url: "/api/v1/leaderboards/global/me",
+        headers: {
+          authorization: `Bearer ${userAToken}`,
+        },
+      });
+      const afterBody = JSON.parse(afterResponse.body);
+
+      expect(afterBody.score).toBe(oldGlobalScore);
+    });
+
+    it("should not change global score when equal score is submitted", async () => {
+      const beforeResponse = await app.inject({
+        method: "GET",
+        url: "/api/v1/leaderboards/global/me",
+        headers: {
+          authorization: `Bearer ${userAToken}`,
+        },
+      });
+      const beforeBody = JSON.parse(beforeResponse.body);
+      const oldGlobalScore = beforeBody.score;
+
+      const gameBestResponse = await app.inject({
+        method: "GET",
+        url: `/api/v1/leaderboards/${gameIdA}/me`,
+        headers: {
+          authorization: `Bearer ${userAToken}`,
+        },
+      });
+      const currentGameBest = JSON.parse(gameBestResponse.body).score;
+
+      await app.inject({
+        method: "POST",
+        url: `/api/v1/games/${gameIdA}/scores`,
+        headers: { authorization: `Bearer ${userAToken}` },
+        body: { score: currentGameBest },
+      });
+
+      const afterResponse = await app.inject({
+        method: "GET",
+        url: "/api/v1/leaderboards/global/me",
+        headers: {
+          authorization: `Bearer ${userAToken}`,
+        },
+      });
+      const afterBody = JSON.parse(afterResponse.body);
+
+      expect(afterBody.score).toBe(oldGlobalScore);
+    });
+
+    it("should return 404 for user without scores on global /me", async () => {
+      const newUserResponse = await app.inject({
+        method: "POST",
+        url: "/api/v1/auth/register",
+        body: {
+          username: `globalnorank_${unique}`,
+          email: `globalnorank_${unique}@example.com`,
+          password: "secure-password-123",
+        },
+      });
+      expect(newUserResponse.statusCode).toBe(201);
+
+      const newLoginResponse = await app.inject({
+        method: "POST",
+        url: "/api/v1/auth/login",
+        body: {
+          email: `globalnorank_${unique}@example.com`,
+          password: "secure-password-123",
+        },
+      });
+      const newToken = JSON.parse(newLoginResponse.body).accessToken;
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/v1/leaderboards/global/me",
+        headers: {
+          authorization: `Bearer ${newToken}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body);
+      expect(body.error.code).toBe("USER_NOT_RANKED");
+
+      await app.prisma.user.deleteMany({
+        where: {
+          OR: [
+            { username: { contains: `globalnorank_${unique}` } },
+            { email: { contains: `globalnorank_${unique}` } },
+          ],
+        },
+      });
+    });
+  });
 });

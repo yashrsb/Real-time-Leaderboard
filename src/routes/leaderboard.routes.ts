@@ -31,4 +31,16 @@ export async function leaderboardRoutes(app: FastifyInstance): Promise<void> {
       return leaderboardController.getMyRanking(request, reply);
     },
   );
+
+  app.get("/api/v1/leaderboards/global", async (request, reply) => {
+    return leaderboardController.getGlobalLeaderboard(request, reply);
+  });
+
+  app.get(
+    "/api/v1/leaderboards/global/me",
+    { preHandler: authenticate },
+    async (request, reply) => {
+      return leaderboardController.getGlobalMyRanking(request, reply);
+    },
+  );
 }

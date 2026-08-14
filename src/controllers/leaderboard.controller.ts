@@ -64,4 +64,43 @@ export class LeaderboardController {
     const result = await this.leaderboardService.getMyRanking(gameId, userId);
     return reply.send(result);
   }
+
+  async getGlobalLeaderboard(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<void> {
+    const pageParsed = pageSchema.safeParse(
+      (request.query as { page?: string | number }).page,
+    );
+    if (!pageParsed.success) {
+      throw badRequest("VALIDATION_ERROR", "Invalid request.");
+    }
+
+    const limitParsed = limitSchema.safeParse(
+      (request.query as { limit?: string | number }).limit,
+    );
+    if (!limitParsed.success) {
+      throw badRequest("VALIDATION_ERROR", "Invalid request.");
+    }
+
+    const result = await this.leaderboardService.getGlobalLeaderboard(
+      pageParsed.data,
+      limitParsed.data,
+    );
+    return reply.send(result);
+  }
+
+  async getGlobalMyRanking(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<void> {
+    const userId = (request as FastifyRequest & { user?: { id: string } }).user
+      ?.id;
+    if (!userId) {
+      throw unauthorized("Authentication required.");
+    }
+
+    const result = await this.leaderboardService.getGlobalMyRanking(userId);
+    return reply.send(result);
+  }
 }

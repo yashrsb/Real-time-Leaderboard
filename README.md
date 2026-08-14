@@ -941,22 +941,152 @@ This separation ensures historical accuracy while maintaining real-time ranking 
 }
 ```
 
+### Top Players Report
+
+#### GET /api/v1/reports/top-players
+
+Generate a historical performance report showing the top-performing players for a specified time period. Requires `Authorization: Bearer <token>`.
+
+**Query Parameters:**
+
+| Parameter | Type    | Default | Validation        |
+| --------- | ------- | ------- | ----------------- |
+| `page`    | integer | `1`     | `>= 1`            |
+| `limit`   | integer | `20`    | `>= 1, <= 100`    |
+| `from`    | date    | -       | Required, ISO date (inclusive) |
+| `to`      | date    | -       | Required, ISO date (inclusive) |
+| `gameId`  | uuid    | -       | Optional, valid game UUID |
+
+**Request:**
+
+```http
+GET /api/v1/reports/top-players?page=1&limit=20&from=2026-08-01&to=2026-08-10
+Authorization: Bearer <ACCESS_TOKEN>
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "from": "2026-08-01",
+  "to": "2026-08-10",
+  "gameId": null,
+  "entries": [
+    {
+      "rank": 1,
+      "userId": "uuid",
+      "username": "player1",
+      "score": 4700
+    },
+    {
+      "rank": 2,
+      "userId": "uuid",
+      "username": "player2",
+      "score": 4200
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "totalPlayers": 42,
+    "totalPages": 3
+  }
+}
+```
+
+**Architecture:**
+
+```text
+Score Submission
+        │
+        ├──────────────► PostgreSQL
+        │                 Immutable score history
+        │
+        └──────────────► Redis
+                          Current best score
+                          Sorted Set leaderboard
+
+Report Request
+        │
+        ▼
+    PostgreSQL
+        │
+        ├── WHERE createdAt >= ? AND createdAt < ?
+        ├── GROUP BY userId
+        ├── SUM(score)
+        ├── ORDER BY totalScore DESC, userId ASC
+        ├── LIMIT ? OFFSET ?
+        └── COUNT(DISTINCT userId) WHERE same filters
+```
+
+**Scoring Semantics:**
+
+The report score is the **sum of all score submissions** during the requested period, not the user's best score or Redis leaderboard score.
+
+Example:
+
+```text
+Submissions during period:
+  1000
+  1500
+  1200
+
+Report score:
+  3700
+
+Redis game leaderboard:
+  user1 → 1500
+```
+
+Therefore:
+
+- **Leaderboard endpoint** returns `1500`
+- **History endpoint** returns `1200, 1500, 1000`
+- **Report endpoint** returns `3700`
+
+**Date Semantics:**
+
+- `from` and `to` are required.
+- `from` is inclusive: `from=2026-08-01` means `>= 2026-08-01 00:00:00`
+- `to` is inclusive: `to=2026-08-10` includes the entire day of August 10
+- Internally uses a half-open interval: `createdAt >= from AND createdAt < to + 1 day`
+
+**Error Responses:**
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Invalid request."
+  }
+}
+```
+
+```json
+{
+  "error": {
+    "code": "GAME_NOT_FOUND",
+    "message": "Game not found."
+  }
+}
+```
+
 ### Future Phases
 
 - `GET  /api/v1/leaderboards/:gameId/stream`
-- `GET  /api/v1/reports/top-players`
 
 ## Current Phase
 
-**Phase 10 — Score History** (Complete)
+**Phase 11 — Top Players Report** (Complete)
 
-- `GET /api/v1/games/:gameId/scores/history` — Authenticated immutable score history from PostgreSQL
-- Supports pagination (`page`, `limit`) and date filtering (`from`, `to`)
-- PostgreSQL provides filtering, ordering, and pagination; Redis is not used for historical data
-- Newest submissions returned first with deterministic tie-breaking via `id DESC`
-- Count query uses the same filters as the history query for accurate pagination metadata
+- `GET /api/v1/reports/top-players` — Authenticated historical performance report from PostgreSQL
+- Report score = SUM of all score submissions during the requested period
+- Supports pagination (`page`, `limit`), date filtering (`from`, `to`), and optional `gameId` filter
+- PostgreSQL performs aggregation (`GROUP BY`, `SUM`, `COUNT DISTINCT`), ordering, and pagination
+- Redis is not used for historical reports; it only stores current derived state
+- Username resolution via batched `findByIds` to avoid N+1 queries
 
 ## Future Phases
 
-- **Phase 11** — Server-Sent Events (SSE) for real-time leaderboard updates
-- **Phase 12** — Reports and analytics
+- **Phase 12** — Server-Sent Events (SSE) for real-time leaderboard updates
+- **Phase 13** — Advanced analytics
